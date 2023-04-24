@@ -1329,6 +1329,40 @@ private:
     F m_func;
 };
 
+
+//=================================================================================================
+/**
+ * @brief Constructor forwarder with self allocation.
+ */
+template <class T, class Constructor, class Dealloc>
+struct external_alloc_forwarder
+{
+    explicit external_alloc_forwarder(Constructor constructor, Dealloc dealloc)
+        : m_construct(std::move(constructor))
+        , m_dealloc(std::move(dealloc))
+    {
+    }
+
+    T* operator()(lua_State* L)
+    {
+        using FnTraits = function_traits<Constructor>;
+        using FnArgs = typename FnTraits::argument_types;
+
+        T* obj = external_constructor<T>::construct(m_construct, make_arguments_list<FnArgs, 2>(L));
+
+        std::error_code ec;
+        auto* value = UserdataValueExternal<T>::place(L, obj, m_dealloc, ec);
+        if (! value)
+            luaL_error(L, "%s", ec.message().c_str());
+
+        return obj;
+    }
+
+private:
+    Constructor m_construct;
+    Dealloc m_dealloc;
+};
+
 //=================================================================================================
 /**
  * @brief Constructor forwarder.
