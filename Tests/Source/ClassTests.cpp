@@ -2629,7 +2629,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
 
         ASSERT_TRUE(result().isUserdata());
         {
-            ObjectTest* obj = result.cast<ObjectTest*>().value();
+            ObjectTest* obj = result<ObjectTest*>();
             obj->setCollected(&collected);
         }
         runLua("result = nil");
