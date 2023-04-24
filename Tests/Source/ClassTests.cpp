@@ -2503,7 +2503,7 @@ TEST_F(ClassTests, ConstructorFactory)
     }
 }
 
-TEST_F(ClassTests, CustomAllocatorConstructor)
+namespace allocations
 {
     template<typename T>
     T* allocate(size_t size)
@@ -2521,6 +2521,10 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
         obj->~T();
         std::free(obj);
     }
+}
+
+TEST_F(ClassTests, CustomAllocatorConstructor)
+{
 
     class ObjectTest
     {
@@ -2531,7 +2535,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
 
         static ObjectTest* create()
         {
-            ObjectTest* obj = allocate<ObjectTest>(sizeof(ObjectTest));
+            ObjectTest* obj = allocations::allocate<ObjectTest>(sizeof(ObjectTest));
             obj->x = 42.42f;
 
             return obj;
@@ -2539,7 +2543,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
 
         static ObjectTest* create(float x)
         {
-            ObjectTest* obj = allocate<ObjectTest>(sizeof(ObjectTest));
+            ObjectTest* obj = allocations::allocate<ObjectTest>(sizeof(ObjectTest));
             obj->x = x;
 
             return obj;
@@ -2570,7 +2574,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
         luabridge::getGlobalNamespace(L)
             .beginClass<ObjectTest>("ObjectTest")
             .addConstructorAllocated([](ObjectTest* destr) {
-                    destroy<ObjectTest>(destr);
+                    allocations::destroy<ObjectTest>(destr);
                 }, []() {
                     return ObjectTest::create();
                 },[](float x) {
@@ -2590,7 +2594,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
         luabridge::getGlobalNamespace(L)
             .beginClass<ObjectTest>("ObjectTest")
             .addConstructorAllocated([](ObjectTest* destr) {
-                    destroy<ObjectTest>(destr);
+                    allocations::destroy<ObjectTest>(destr);
                 }, []() {
                     return ObjectTest::create();
                 },[](float x) {
@@ -2610,7 +2614,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
         luabridge::getGlobalNamespace(L)
             .beginClass<ObjectTest>("ObjectTest")
             .addConstructorAllocated([](ObjectTest* destr) {
-                    destroy<ObjectTest>(destr);
+                    allocations::destroy<ObjectTest>(destr);
                 }, []() {
                     return ObjectTest::create();
                 },[](float x) {
