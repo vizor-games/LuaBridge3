@@ -1216,6 +1216,53 @@ class Namespace : public detail::Registrar
 
         //=========================================================================================
         /**
+         * @brief Add or replace a destructor and constructors with own allocation.
+         *
+         */
+        template <class Destructor, class... Functions>
+        auto addConstructorAllocated(Destructor destructor, Functions... functions)
+            -> std::enable_if_t<(detail::is_callable_v<Functions> && ...) && (sizeof...(Functions) > 0), Class<T>&>
+        {
+            assertStackState();
+
+            if constexpr (sizeof...(Functions) == 1)
+            {
+                ([&]
+                {
+                    detail::push_function(L, detail::external_alloc_forwarder<T, Functions, Destructor>(std::move(functions), std::move(destructor)));
+
+                } (), ...);
+            }
+            else
+            {
+                lua_createtable(L, static_cast<int>(sizeof...(Functions)), 0);
+
+                int idx = 1;
+
+                ([&]
+                {
+                    lua_createtable(L, 2, 0);
+                    lua_pushinteger(L, 1);
+                    lua_pushinteger(L, static_cast<int>(detail::function_arity_excluding_v<Functions, lua_State*>));
+                    lua_settable(L, -3);
+                    lua_pushinteger(L, 2);
+                    detail::push_function(L, detail::external_alloc_forwarder<T, Functions, Destructor>(std::move(functions), std::move(destructor)));
+                    lua_settable(L, -3);
+                    lua_rawseti(L, -2, idx);
+                    ++idx;
+
+                } (), ...);
+
+                lua_pushcclosure_x(L, &detail::try_overload_functions<true>, 1);
+            }
+
+            rawsetfield(L, -2, "__call");
+
+            return *this;
+        }
+
+        //=========================================================================================
+        /**
          * @brief Add or replace a factory.
          *
          * The primary Constructor is invoked when calling the class type table like a function.

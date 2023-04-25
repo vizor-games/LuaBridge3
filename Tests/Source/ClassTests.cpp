@@ -5,6 +5,8 @@
 
 #include "TestBase.h"
 
+#include <iostream>
+
 #include <exception>
 #include <functional>
 #include <map>
@@ -2500,6 +2502,146 @@ TEST_F(ClassTests, ConstructorFactory)
 
         ASSERT_TRUE(result().isNumber());
         ASSERT_EQ(42, result<int>());
+    }
+}
+
+namespace allocations
+{
+    template<typename T>
+    T* allocate(size_t size)
+    {
+        void* memory = std::malloc(size);
+
+        T* obj = new(memory) T();
+
+        return obj;
+    }
+
+    template<typename T>
+    void destroy(T* obj)
+    {
+        obj->~T();
+        std::free(obj);
+    }
+}
+
+TEST_F(ClassTests, CustomAllocatorConstructor)
+{
+
+    class ObjectTest
+    {
+    private:
+        float x;
+        bool* collected;
+    public:
+
+        static ObjectTest* create()
+        {
+            ObjectTest* obj = allocations::allocate<ObjectTest>(sizeof(ObjectTest));
+            obj->x = 42.42f;
+
+            return obj;
+        }
+
+        static ObjectTest* create(float x)
+        {
+            ObjectTest* obj = allocations::allocate<ObjectTest>(sizeof(ObjectTest));
+            obj->x = x;
+
+            return obj;
+        }
+
+        void setCollected(bool* collected)
+        {
+            this->collected = collected;
+        }
+
+        float getX() const
+        {
+            return x;
+        }
+
+        void setX(float x)
+        {
+            this->x = x;
+        }
+
+        ~ObjectTest()
+        {
+            if (this->collected != nullptr)
+            {
+                (*this->collected) = true;
+            }
+        }
+    };
+
+    {
+        luabridge::getGlobalNamespace(L)
+            .beginClass<ObjectTest>("ObjectTest")
+            .addConstructorAllocated([](ObjectTest* destr) {
+                    allocations::destroy<ObjectTest>(destr);
+                }, []() {
+                    return ObjectTest::create();
+                },[](float x) {
+                    return ObjectTest::create(x);
+                })
+            .addProperty("x", &ObjectTest::getX, &ObjectTest::setX)
+            .endClass();
+
+
+        runLua("obj = ObjectTest (); result = obj.x");
+
+        ASSERT_TRUE(result().isNumber());
+        ASSERT_EQ(42.42f, result<double>());
+    }
+
+    {
+        luabridge::getGlobalNamespace(L)
+            .beginClass<ObjectTest>("ObjectTest")
+            .addConstructorAllocated([](ObjectTest* destr) {
+                    allocations::destroy<ObjectTest>(destr);
+                }, []() {
+                    return ObjectTest::create();
+                },[](float x) {
+                    return ObjectTest::create(x);
+                })
+            .addProperty("x", &ObjectTest::getX, &ObjectTest::setX)
+            .endClass();
+
+
+        runLua("obj = ObjectTest (39.42); result = obj.x");
+
+        ASSERT_TRUE(result().isNumber());
+        ASSERT_EQ(39.42f, result<double>());
+    }
+
+    {
+        luabridge::getGlobalNamespace(L)
+            .beginClass<ObjectTest>("ObjectTest")
+            .addConstructorAllocated([](ObjectTest* destr) {
+                    allocations::destroy<ObjectTest>(destr);
+                }, []() {
+                    return ObjectTest::create();
+                },[](float x) {
+                    return ObjectTest::create(x);
+                })
+            .addProperty("x", &ObjectTest::getX, &ObjectTest::setX)
+            .endClass();
+
+        runLua("result = ObjectTest (42.39)");
+
+        bool collected = false;
+
+        ASSERT_TRUE(result().isUserdata());
+        {
+            ObjectTest* obj = result<ObjectTest*>();
+            obj->setCollected(&collected);
+        }
+
+        runLua("result = nil");
+        lua_gc(L, LUA_GCCOLLECT, 0);
+
+        ASSERT_TRUE(collected);
     }
 }
 
