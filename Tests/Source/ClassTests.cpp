@@ -5,6 +5,8 @@
 
 #include "TestBase.h"
 
+#include <iostream>
+
 #include <exception>
 #include <functional>
 #include <map>
@@ -2566,7 +2568,10 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
 
         ~ObjectTest()
         {
-            (*this->collected) = true;
+            if (this->collected != nullptr)
+            {
+                (*this->collected) = true;
+            }
         }
     };
 
@@ -2587,7 +2592,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
         runLua("obj = ObjectTest (); result = obj.x");
 
         ASSERT_TRUE(result().isNumber());
-        ASSERT_EQ(42.42f, result<int>());
+        ASSERT_EQ(42.42f, result<double>());
     }
 
     {
@@ -2607,7 +2612,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
         runLua("obj = ObjectTest (39.42); result = obj.x");
 
         ASSERT_TRUE(result().isNumber());
-        ASSERT_EQ(39.42f, result<int>());
+        ASSERT_EQ(39.42f, result<double>());
     }
 
     {
@@ -2632,6 +2637,7 @@ TEST_F(ClassTests, CustomAllocatorConstructor)
             ObjectTest* obj = result<ObjectTest*>();
             obj->setCollected(&collected);
         }
+
         runLua("result = nil");
         lua_gc(L, LUA_GCCOLLECT, 0);
 
