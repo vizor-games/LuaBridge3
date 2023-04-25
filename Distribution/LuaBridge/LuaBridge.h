@@ -6809,6 +6809,35 @@ private:
     F m_func;
 };
 
+template <class T, class Constructor, class Dealloc>
+struct external_alloc_forwarder
+{
+    explicit external_alloc_forwarder(Constructor constructor, Dealloc dealloc)
+        : m_construct(std::move(constructor))
+        , m_dealloc(std::move(dealloc))
+    {
+    }
+
+    T* operator()(lua_State* L)
+    {
+        using FnTraits = function_traits<Constructor>;
+        using FnArgs = typename FnTraits::argument_types;
+
+        T* obj = external_constructor<T>::construct(m_construct, make_arguments_list<FnArgs, 2>(L));
+
+        std::error_code ec;
+        auto* value = UserdataValueExternal<T>::place(L, obj, m_dealloc, ec);
+        if (! value)
+            luaL_error(L, "%s", ec.message().c_str());
+
+        return obj;
+    }
+
+private:
+    Constructor m_construct;
+    Dealloc m_dealloc;
+};
+
 template <class T, class Alloc, class Dealloc>
 struct factory_forwarder
 {
@@ -9036,6 +9065,48 @@ class Namespace : public detail::Registrar
             }
 
             rawsetfield(L, -2, "__call"); 
+
+            return *this;
+        }
+
+        template <class Destructor, class... Functions>
+        auto addConstructorAllocated(Destructor destructor, Functions... functions)
+            -> std::enable_if_t<(detail::is_callable_v<Functions> && ...) && (sizeof...(Functions) > 0), Class<T>&>
+        {
+            assertStackState();
+
+            if constexpr (sizeof...(Functions) == 1)
+            {
+                ([&]
+                {
+                    detail::push_function(L, detail::external_alloc_forwarder<T, Functions, Destructor>(std::move(functions), std::move(destructor)));
+
+                } (), ...);
+            }
+            else
+            {
+                lua_createtable(L, static_cast<int>(sizeof...(Functions)), 0);
+
+                int idx = 1;
+
+                ([&]
+                {
+                    lua_createtable(L, 2, 0);
+                    lua_pushinteger(L, 1);
+                    lua_pushinteger(L, static_cast<int>(detail::function_arity_excluding_v<Functions, lua_State*>));
+                    lua_settable(L, -3);
+                    lua_pushinteger(L, 2);
+                    detail::push_function(L, detail::external_alloc_forwarder<T, Functions, Destructor>(std::move(functions), std::move(destructor)));
+                    lua_settable(L, -3);
+                    lua_rawseti(L, -2, idx);
+                    ++idx;
+
+                } (), ...);
+
+                lua_pushcclosure_x(L, &detail::try_overload_functions<true>, 1);
+            }
+
+            rawsetfield(L, -2, "__call");
 
             return *this;
         }
